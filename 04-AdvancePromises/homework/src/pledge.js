@@ -38,68 +38,100 @@ $Promise.prototype.then = function (successCb, errorCb) {
     errorCb = false;
   }
 
-  const downstreamPromise = new $Promise(function(){});
+  const downstreamPromise = new $Promise(function () {});
 
   this._handlerGroups.push({
     successCb,
     errorCb,
-    downstreamPromise
+    downstreamPromise,
   });
   if (this._state !== "pending") {
     this._callHandlers();
   }
-    return downstreamPromise;
+  return downstreamPromise;
 };
 
 $Promise.prototype.catch = function (errorCb) {
-    return this.then(null, errorCb);
+  return this.then(null, errorCb);
 };
 
 $Promise.prototype._callHandlers = function (handlerGroup, value) {
-    while (this._handlerGroups.length > 0){
-        let item = this._handlerGroups.shift();
-        if (this._state === 'fulfilled'){
-            //item.successCb && item.successCb(this._value);
-            if (!item.successCb){
-                item.downstreamPromise._internalResolve(this._value);
-            } else {
-                try {
-                    const result = item.successCb(this._value);
-                    if (result instanceof $Promise){
-                        result.then(
-                            value => item.downstreamPromise._internalResolve(value),
-                            reason => item.downstreamPromise._internalReject(reason)
-                        );
-                    } else {
-                        item.downstreamPromise._internalResolve(result);
-                    }
-                }
-                catch (error) {
-                    item.downstreamPromise._internalReject(error);
-                }
-            }
-        } else {
-            //item.errorCb && item.errorCb(this._value);
-            if (!item.errorCb){
-                item.downstreamPromise._internalReject(this._value);
-            } else {
-                try {
-                    const result = item.errorCb(this._value);
-                    if (result instanceof $Promise){
-                        result.then(
-                            value => item.downstreamPromise._internalResolve(value),
-                            reason => item.downstreamPromise._internalReject(reason)
-                        );
-                    } else {
-                        item.downstreamPromise._internalResolve(result);
-                    }
-                }
-                catch (error) {
-                    item.downstreamPromise._internalReject(error);
-                }
-            }
+  while (this._handlerGroups.length > 0) {
+    let item = this._handlerGroups.shift();
+    if (this._state === "fulfilled") {
+      //item.successCb && item.successCb(this._value);
+      if (!item.successCb) {
+        item.downstreamPromise._internalResolve(this._value);
+      } else {
+        try {
+          const result = item.successCb(this._value);
+          if (result instanceof $Promise) {
+            result.then(
+              (value) => item.downstreamPromise._internalResolve(value),
+              (reason) => item.downstreamPromise._internalReject(reason)
+            );
+          } else {
+            item.downstreamPromise._internalResolve(result);
+          }
+        } catch (error) {
+          item.downstreamPromise._internalReject(error);
         }
+      }
+    } else {
+      //item.errorCb && item.errorCb(this._value);
+      if (!item.errorCb) {
+        item.downstreamPromise._internalReject(this._value);
+      } else {
+        try {
+          const result = item.errorCb(this._value);
+          if (result instanceof $Promise) {
+            result.then(
+              (value) => item.downstreamPromise._internalResolve(value),
+              (reason) => item.downstreamPromise._internalReject(reason)
+            );
+          } else {
+            item.downstreamPromise._internalResolve(result);
+          }
+        } catch (error) {
+          item.downstreamPromise._internalReject(error);
+        }
+      }
     }
+  }
+};
+
+$Promise.resolve = function (value) {
+  if (value instanceof $Promise) {
+    return value;
+  }
+  const promise = new $Promise(() => {});
+
+  promise._internalResolve(value);
+
+  return promise;
+};
+
+$Promise.all = function (array) {
+  if (!Array.isArray(array)) throw new TypeError();
+  const promise = new $Promise((resolve, reject) => {
+    const promiseArray = array.map((promise) => $Promise.resolve(promise));
+    const results = Array(array.length);
+    let pendingCount = array.length;
+    promiseArray.forEach((promise, i) =>
+      promise.then(
+        (value) => {
+          results[i] = value;
+          pendingCount--;
+          if (pendingCount === 0) {
+            resolve(results);
+          }
+        },
+        (error) => reject(error)
+      )
+    );
+  });
+
+  return promise;
 };
 
 module.exports = $Promise;
